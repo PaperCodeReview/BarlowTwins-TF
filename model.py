@@ -112,24 +112,30 @@ class BarlowTwins(tf.keras.Model):
             z_b_norm = (z_b - tf.reduce_mean(z_b, axis=0)) / tf.math.reduce_std(z_b, axis=0) # (b, j)
 
             # cross-correlation matrix
-            c_ij = tf.einsum(
-                'bi,bj->ij', 
+            c_ij = tf.einsum('bi,bj->ij', 
                 tf.math.l2_normalize(z_a_norm, axis=0), 
                 tf.math.l2_normalize(z_b_norm, axis=0)) / tf.cast(N, tf.float32) # (i, j)
 
             # loss
-            eye = tf.eye(D, D, dtype=tf.float32)
-            loss_invariance = tf.reduce_sum(tf.square(1. - tf.boolean_mask(c_ij, tf.cast(eye, tf.bool))))
-            loss_reduction = tf.reduce_sum(tf.square(tf.boolean_mask(c_ij, tf.cast(1-eye, tf.bool))))
+            # for obtaining loss with one-step
+            # c_ij = tf.where(
+            #     tf.cast(eye, tf.bool),
+            #     tf.square(1. - c_ij),
+            #     tf.square(c_ij) * self.args.loss_weight)
+            # loss_barlowtwins = tf.reduce_sum(c_ij)
+
+            # for separating invariance and reduction
+            loss_invariance = tf.reduce_sum(tf.square(1. - tf.boolean_mask(c_ij, tf.eye(D, dtype=tf.bool))))
+            loss_reduction = tf.reduce_sum(tf.square(tf.boolean_mask(c_ij, ~tf.eye(D, dtype=tf.bool))))
 
             loss_barlowtwins = loss_invariance + self.args.loss_weight * loss_reduction
             loss_decay = sum(self.losses)
 
             loss = loss_barlowtwins + loss_decay
-            total_loss = loss / self._num_workers
+            loss_per_replica = loss / tf.constant(self._num_workers, dtype=tf.float32)
 
         trainable_vars = self.trainable_variables
-        grads = tape.gradient(total_loss, trainable_vars)
+        grads = tape.gradient(loss_per_replica, trainable_vars)
         self.optimizer.apply_gradients(zip(grads, trainable_vars))
 
         results = {
@@ -137,5 +143,6 @@ class BarlowTwins(tf.keras.Model):
             'loss_barlowtwins': loss_barlowtwins, 
             'loss_decay': loss_decay, 
             'loss_invariance': loss_invariance,
-            'loss_reduction': loss_reduction}
+            'loss_reduction': loss_reduction
+        }
         return results

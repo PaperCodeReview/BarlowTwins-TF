@@ -33,7 +33,7 @@ def get_arguments():
     parser.add_argument("--weight_decay",   type=float,     default=1.5e-6)
     parser.add_argument("--use_bias",       action='store_true')
     parser.add_argument("--steps",          type=int,       default=0)
-    parser.add_argument("--epochs",         type=int,       default=200)
+    parser.add_argument("--epochs",         type=int,       default=1000)
     parser.add_argument("--lr",             type=float,     default=0.2)
 
     parser.add_argument("--evaluate",       action='store_true')
